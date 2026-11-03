@@ -163,12 +163,18 @@ li:last-child{border-bottom:0}
     </div></details>
 
     <details class="box"><summary>Moneda y tipo de cambio</summary><div>
-      <p class="hint">Los totales se muestran en tu moneda principal; lo que registres en la otra moneda se convierte con esta tasa. El tipo de cambio oficial del BCN para 2026 es 36.6243 córdobas por dólar. Si tu banco usa otro, escríbelo aquí.</p>
-      <select id="cbase" aria-label="Moneda principal"><option value="NIO">Moneda principal: Córdobas (C$)</option><option value="USD">Moneda principal: Dólares (US$)</option></select>
-      <input id="crate" type="number" inputmode="decimal" step="0.0001" min="0" placeholder="Córdobas por 1 dólar" aria-label="Córdobas por dólar">
-      <button class="sm" data-a="rate">Guardar</button>
+      <p class="hint">Los totales se muestran en tu moneda principal; lo que registres en otras monedas se convierte con la tasa que pongas abajo. Para Nicaragua, la oficial del BCN en 2026 es 36.6243 córdobas por dólar.</p>
+      <select id="cbase" aria-label="Moneda principal"></select>
+      <p class="hint">Arriba eliges tu moneda principal. Aquí pones cuántas unidades de cada moneda equivalen a 1 US$ y la editas cuando cambie.</p>
+      <ul id="rates"></ul>
+      <div class="row2"><select id="cadd" aria-label="Agregar moneda"></select><input id="crate2" type="number" inputmode="decimal" step="0.0001" min="0" placeholder="Por 1 US$" aria-label="Tasa por dólar"></div>
+      <label class="hint" style="display:flex;gap:8px;align-items:center"><input class="tg" type="checkbox" id="cauto">Obtener la tasa de internet (automática)</label>
+      <div class="btns"><button class="sm" data-a="cadd">Agregar moneda</button><button class="sm" data-a="rates">Actualizar tasas ahora</button></div>
+      <p class="hint" id="rmsg"></p>
+      <p class="hint">Cada moneda puede ser <b>Manual</b> (tú escribes la tasa) o <b>Auto</b> (se trae de internet, una vez al día). Tasas automáticas: <a href="https://www.exchangerate-api.com" target="_blank" rel="noopener">Rates By Exchange Rate API</a>.</p>
       <p class="hint" style="margin-top:6px">Convertidor rápido</p>
-      <div class="row2"><input id="cvamt" type="number" inputmode="decimal" min="0" placeholder="Monto" aria-label="Monto a convertir"><select id="cvfrom" aria-label="Conversión"><option value="USD">Dólares → Córdobas</option><option value="NIO">Córdobas → Dólares</option></select></div>
+      <div class="row2"><input id="cvamt" type="number" inputmode="decimal" min="0" placeholder="Monto" aria-label="Monto a convertir"><select id="cvfrom" aria-label="De"></select></div>
+      <select id="cvto" aria-label="A"></select>
       <p id="cvout" style="font-size:20px;font-weight:700;margin:0"></p>
     </div></details>
 
@@ -225,7 +231,7 @@ li:last-child{border-bottom:0}
 (function(){
   var CATS={out:["Comida","Transporte","Vivienda","Servicios","Salud","Ocio","Ahorro","Deudas","Otros"],in:["Sueldo","Ingreso extra","Ventas","Otros"]};
   var KEY="mis-cuentas-v1";
-  function blank(){return {tx:[],budgets:{},goal:{name:"",target:0},debts:[],custom:{out:[],in:[]},alerts:{lead:1,off:{}},cur:{base:"NIO",rate:36.6243},accts:["Efectivo","Banco","Tarjeta"]}}
+  function blank(){return {tx:[],budgets:{},goal:{name:"",target:0},debts:[],custom:{out:[],in:[]},alerts:{lead:1,off:{}},cur:{base:"NIO",rate:36.6243,rates:{USD:1,NIO:36.6243},list:["NIO","USD"]},accts:["Efectivo","Banco","Tarjeta"]}}
   var db=blank(),half=0,type="out",editId=null,view=new Date();view.setDate(1);
   try{var s=localStorage.getItem(KEY);if(s){var p=JSON.parse(s);if(Array.isArray(p))db.tx=p;else if(p&&p.tx)db=Object.assign(blank(),p)}}catch(e){}
   var SB_URL='https://qmvoukkyiydvljsfewqg.supabase.co',SB_KEY='sb_publishable_LZeKEG2PgP39WVuAmTaYwQ_ms7J3vf1',sb=null,uid=null,uemail='',pushT=null;
@@ -261,10 +267,32 @@ li:last-child{border-bottom:0}
   }
   async function doOut(){try{await sb.auth.signOut()}catch(e){}uid=null;sui();smsg('Sesión cerrada. Tus datos siguen en este dispositivo.')}
   function $(id){return document.getElementById(id)}
-  function money(n,c){var s=(c||db.cur.base)==="USD"?"US$":"C$";return s+n.toLocaleString("es",{minimumFractionDigits:2,maximumFractionDigits:2})}
-  function cv(t){var b=db.cur.base,c=t.cur||b;if(c===b)return t.amount;return b==="NIO"?t.amount*db.cur.rate:t.amount/db.cur.rate}
-  function updConv(){var a=parseFloat($('amount').value),c=$('cur').value,r=db.cur.rate;if(!(a>0)){$('conv').textContent='';return}$('conv').textContent='≈ '+money(c==='USD'?a*r:a/r,c==='USD'?'NIO':'USD')+' (tasa '+r+')'}
-  function updCv(){var a=parseFloat($('cvamt').value),f=$('cvfrom').value;if(!(a>0)){$('cvout').textContent='';return}$('cvout').textContent=f==='USD'?money(a*db.cur.rate,'NIO'):money(a/db.cur.rate,'USD')}
+  var CUR={USD:['US$','Dólar estadounidense'],NIO:['C$','Córdoba nicaragüense'],MXN:['MX$','Peso mexicano'],GTQ:['Q','Quetzal guatemalteco'],HNL:['L','Lempira hondureña'],CRC:['₡','Colón costarricense'],DOP:['RD$','Peso dominicano'],COP:['COL$','Peso colombiano'],PEN:['S/','Sol peruano'],CLP:['CLP$','Peso chileno'],ARS:['AR$','Peso argentino'],BRL:['R$','Real brasileño'],BOB:['Bs','Boliviano'],UYU:['$U','Peso uruguayo'],PYG:['₲','Guaraní paraguayo'],EUR:['€','Euro'],GBP:['£','Libra esterlina'],CAD:['CA$','Dólar canadiense']};
+  function sym(c){return CUR[c]?CUR[c][0]:c}
+  function cn(c){return CUR[c]?CUR[c][1]:c}
+  function R(){var c=db.cur;if(!c.rates)c.rates={USD:1,NIO:c.rate||36.6243};if(!c.list)c.list=['NIO','USD'];return c}
+  function money(n,c){c=c||R().base;var d=(c==='CLP'||c==='PYG')?0:2;return sym(c)+n.toLocaleString('es',{minimumFractionDigits:d,maximumFractionDigits:d})}
+  function rmsg(t){var m=$('rmsg');if(m)m.textContent=t}
+  async function updateRates(manual){
+    var A=R().auto||{},ks=R().list.filter(function(c){return c!=='USD'&&A[c]});
+    if(!ks.length){if(manual)rmsg('Marca "Auto" en alguna moneda primero.');return}
+    try{
+      var r=await fetch('https://open.er-api.com/v6/latest/USD'),j=await r.json();
+      if(j.result!=='success')throw new Error('x');
+      var n=0;ks.forEach(function(c){if(j.rates&&j.rates[c]>0){R().rates[c]=j.rates[c];n++}});
+      R().updated=new Date().toISOString();save();render();rmsg('Se actualizaron '+n+' tasa(s) desde internet.');
+    }catch(e){rmsg('No se pudo actualizar. Se siguen usando las tasas guardadas.')}
+  }
+  function fillCur(){
+    var L=R().list,b=R().base,o=L.map(function(c){return '<option value="'+c+'">'+cn(c)+' ('+sym(c)+')</option>'}).join('');
+    ['cur','dcur','cbase','cvfrom','cvto'].forEach(function(id){var e=$(id),v=e.value;e.innerHTML=o;var ok=v&&L.indexOf(v)>=0;e.value=id==='cbase'?b:ok?v:id==='cvfrom'?(L.indexOf('USD')>=0?'USD':L[0]):b});
+    $('cadd').innerHTML=Object.keys(CUR).filter(function(c){return L.indexOf(c)<0}).map(function(c){return '<option value="'+c+'">'+cn(c)+' ('+sym(c)+')</option>'}).join('');
+    var h='';L.forEach(function(c){if(c==='USD')return;h+='<li><div class="d2"><b>'+esc(cn(c))+'</b><span>1 US$ =</span></div><input data-rate="'+c+'" type="number" step="0.0001" min="0" value="'+R().rates[c]+'"'+(R().auto&&R().auto[c]?' readonly':'')+' style="width:110px" aria-label="Tasa de '+c+'"><label style="font-size:13px;display:flex;align-items:center;gap:4px"><input class="tg" type="checkbox" data-auto="'+c+'"'+(R().auto&&R().auto[c]?' checked':'')+'>Auto</label>'+(c!==b?'<button class="x" data-cdel="'+c+'" aria-label="Quitar">×</button>':'')+'</li>'});
+    $('rates').innerHTML=h||'<li class="empty">Solo dólares por ahora.</li>';if(R().updated&&!$('rmsg').textContent)rmsg('Última actualización automática: '+new Date(R().updated).toLocaleString('es'));
+  }
+  function cv(t){var c0=R(),b=c0.base,c=t.cur||b;if(c===b||!c0.rates[c]||!c0.rates[b])return t.amount;return t.amount/c0.rates[c]*c0.rates[b]}
+  function updConv(){var a=parseFloat($('amount').value),c=$('cur').value,b=R().base,r=R().rates,t=c!==b?b:(b!=='USD'?'USD':(R().list.filter(function(x){return x!==b})[0]||''));if(!(a>0)||!t||!r[c]||!r[t]){$('conv').textContent='';return}$('conv').textContent='≈ '+money(a/r[c]*r[t],t)+' (tasa '+(+(r[t]/r[c]).toFixed(4))+')'}
+  function updCv(){var a=parseFloat($('cvamt').value),f=$('cvfrom').value,t=$('cvto').value,r=R().rates;if(!(a>0)||!r[f]||!r[t]){$('cvout').textContent='';return}$('cvout').textContent=money(a/r[f]*r[t],t)}
   function esc(t){var d=document.createElement("div");d.textContent=t;return d.innerHTML}
   function ym(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")}
   function today(){var d=new Date();return ym(d)+"-"+String(d.getDate()).padStart(2,"0")}
@@ -354,7 +382,7 @@ li:last-child{border-bottom:0}
   }
   function renderYear(){var y=view.getFullYear(),h='<p class="hint">'+y+' · incluye lo fijo proyectado</p><ul>',ti=0,to=0;for(var m=1;m<=12;m++){var d=monthData(y+'-'+String(m).padStart(2,'0'));ti+=d.in;to+=d.out;if(d.in||d.out)h+='<li><div class="d2"><b style="text-transform:capitalize">'+new Date(y,m-1,1).toLocaleDateString('es',{month:'long'})+'</b><span>+'+money(d.in)+' · −'+money(d.out)+'</span></div><span class="amt '+(d.in-d.out>=0?'in':'out')+'">'+money(d.in-d.out)+'</span></li>'}h+='<li><div class="d2"><b>Total del año</b></div><span class="amt '+(ti-to>=0?'in':'out')+'">'+money(ti-to)+'</span></li></ul>';$('year').innerHTML=h}
   function dueAmt(g){var r=Math.max(0,g.amount-(g.paid||0));return g.min?Math.min(g.min,r):r}
-  function renderDebtUi(){var dv=$('dsel').value;$('dsel').innerHTML=db.debts.map(function(d){return '<option value="'+d.id+'">'+esc(d.name)+' ('+(d.cur==='USD'?'US$':'C$')+')</option>'}).join('');if(dv)$('dsel').value=dv}
+  function renderDebtUi(){var dv=$('dsel').value;$('dsel').innerHTML=db.debts.map(function(d){return '<option value="'+d.id+'">'+esc(d.name)+' ('+sym(d.cur||R().base)+')</option>'}).join('');if(dv)$('dsel').value=dv}
   async function forgot(){var e1=$('sem').value.trim();if(!sb||!e1){smsg('Escribe tu correo arriba y toca de nuevo.');return}try{var r=await sb.auth.resetPasswordForEmail(e1,{redirectTo:location.origin+location.pathname});smsg(r.error?errMsg(r.error.message):'Te enviamos un enlace para crear una nueva contraseña. Revisa tu correo.')}catch(x){smsg(errMsg(x&&x.message))}}
   async function newPw(){var p=$('spw2').value;if(p.length<6){smsg('Mínimo 6 caracteres.');return}try{var r=await sb.auth.updateUser({password:p});if(r.error){smsg(errMsg(r.error.message));return}$('spw2').value='';$('srec').hidden=true;smsg('Contraseña actualizada.')}catch(x){smsg(errMsg(x&&x.message))}}
   var PK='mis-cuentas-pin';
@@ -367,7 +395,7 @@ li:last-child{border-bottom:0}
   function csvOut(){var nl=String.fromCharCode(10),dq=String.fromCharCode(34);function q(v){return dq+String(v==null?'':v).split(dq).join(dq+dq)+dq}var rows=['fecha,tipo,categoria,nota,monto,moneda,cuenta,fijo'];db.tx.slice().sort(function(x,y){return x.date.localeCompare(y.date)}).forEach(function(t){rows.push([t.date,t.type==='in'?'ingreso':t.type==='tr'?'transferencia':'gasto',q(t.cat),q(t.note),t.amount,t.cur||db.cur.base,q(t.acc),t.fixed?'si':'no'].join(','))});var csv=rows.join(nl);$('bk').value=csv;$('bk').select();try{navigator.clipboard.writeText(csv).then(function(){$('bmsg').textContent='CSV copiado. Pégalo en Excel o en un archivo .csv.'},function(){$('bmsg').textContent='Selecciona el texto y cópialo manualmente.'})}catch(x){$('bmsg').textContent='Selecciona el texto y cópialo manualmente.'}}
 
   function renderMore(){
-    $("cbase").value=db.cur.base;if(document.activeElement!==$("crate"))$("crate").value=db.cur.rate;if(!editId&&!$("amount").value)$("cur").value=db.cur.base;
+    var ae=document.activeElement;if(!(ae&&ae.dataset&&ae.dataset.rate))fillCur();if(!editId&&!$("amount").value)$("cur").value=db.cur.base;
     var sel=$("bcat").value;
     $("bcat").innerHTML=cl("out").map(function(c){return "<option>"+esc(c)+"</option>"}).join("");
     if(sel)$("bcat").value=sel;
@@ -428,6 +456,7 @@ li:last-child{border-bottom:0}
   $("more").onclick=function(e){
     var b=e.target.closest("button");if(!b)return;
     var a=b.dataset.a;
+    if(a==="rates"){updateRates(true);return}
     if(a==="forgot"){forgot();return}
     if(a==="newpw"){newPw();return}
     if(a==="pinon"){setPin();return}
@@ -441,7 +470,8 @@ li:last-child{border-bottom:0}
     else if(a==="dpay"||a==="dmin"){var di=$("dsel").value,dg=db.debts.find(function(x){return String(x.id)===di}),pv=a==="dmin"&&dg?dueAmt(dg):parseFloat($("dpay").value);if(!dg||!(pv>0))return;var rem=dg.amount-(dg.paid||0);if(pv>rem)pv=rem;var dm=dueAmt(dg);dg.paid=(dg.paid||0)+pv;if(dg.min&&pv>=dm-0.005){var q0=new Date(dg.due+"T00:00:00"),n2=new Date(q0.getFullYear(),q0.getMonth()+1,1);n2.setDate(Math.min(q0.getDate(),new Date(n2.getFullYear(),n2.getMonth()+1,0).getDate()));dg.due=ym(n2)+"-"+String(n2.getDate()).padStart(2,"0")}db.tx.push({id:Date.now(),type:"out",amount:pv,cur:dg.cur,acc:$("dacc").value,cat:"Deudas",note:"Abono "+dg.name,date:today(),fixed:false});if(dg.amount-dg.paid<=0.005)db.debts=db.debts.filter(function(x){return x!==dg});$("dpay").value=""}
     else if(a==="acc"){var an=$("anew").value.trim();if(!an||db.accts.indexOf(an)>=0)return;db.accts.push(an);$("anew").value=""}
     else if(b.dataset.acdel){db.accts.splice(parseInt(b.dataset.acdel,10),1)}
-    else if(a==="rate"){var rr=parseFloat($("crate").value);if(rr>0)db.cur.rate=rr;db.cur.base=$("cbase").value;$("cur").value=db.cur.base;updConv();updCv()}
+    else if(a==="cadd"){var cc=$("cadd").value,rv=parseFloat($("crate2").value),au=$("cauto").checked;if(!cc||(!(rv>0)&&!au))return;R().list.push(cc);R().rates[cc]=rv>0?rv:0;if(au){R().auto=R().auto||{};R().auto[cc]=true}$("crate2").value="";$("cauto").checked=false;if(au)setTimeout(function(){updateRates(true)},0)}
+    else if(b.dataset.cdel){var cd=b.dataset.cdel;R().list=R().list.filter(function(x){return x!==cd})}
     else if(a==="goal"){db.goal={name:$("gname").value.trim(),target:parseFloat($("gtarget").value)||0}}
     else if(a==="debt"){var n=$("dname").value.trim(),m=parseFloat($("damt").value),d=$("ddue").value;if(!n||!(m>0)||!d)return;db.debts.push({id:Date.now(),name:n,amount:m,cur:$("dcur").value,paid:0,min:parseFloat($("dmin").value)||0,due:d});$("dname").value="";$("damt").value="";$("dmin").value="";$("ddue").value=""}
     else if(a==="cat"){var k=$("ctype").value,nm=$("ccat").value.trim();if(!nm||cl(k).indexOf(nm)>=0)return;db.custom[k].push(nm);$("ccat").value="";fillCats()}
@@ -463,7 +493,7 @@ li:last-child{border-bottom:0}
   };
 
   if(sb){sb.auth.getSession().then(function(r){var s=r.data&&r.data.session;if(s){uid=s.user.id;uemail=s.user.email;sui();pull()}});sb.auth.onAuthStateChange(function(ev){if(ev==='SIGNED_OUT'){uid=null;sui()}if(ev==='PASSWORD_RECOVERY'){$('srec').hidden=false;$('srec').closest('details').open=true;smsg('Escribe tu nueva contraseña.')}})}else{smsg('La sincronización funciona desde tu enlace publicado en GitHub.')}
-  $('cur').value=db.cur.base;$('amount').oninput=updConv;$('cur').onchange=updConv;$('cvamt').oninput=updCv;$('cvfrom').onchange=updCv;
+  fillCur();if(R().list.some(function(c){return R().auto&&R().auto[c]})&&(!R().updated||Date.now()-new Date(R().updated).getTime()>864e5))updateRates(false);$('cur').value=db.cur.base;$('rates').onchange=function(e){var ca=e.target.dataset.auto;if(ca){R().auto=R().auto||{};if(e.target.checked)R().auto[ca]=true;else delete R().auto[ca];save();fillCur();if(e.target.checked)updateRates(true);return}var c=e.target.dataset.rate;if(!c)return;var v=parseFloat(e.target.value);if(v>0){R().rates[c]=v;save();render();updConv()}};$('cbase').onchange=function(){R().base=$('cbase').value;save();$('cur').value=R().base;render();updConv()};$('cvto').onchange=updCv;$('amount').oninput=updConv;$('cur').onchange=updConv;$('cvamt').oninput=updCv;$('cvfrom').onchange=updCv;
   $('q').oninput=render;$('facc').onchange=render;
   try{if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js')}catch(e){}
   lockNow();$('unlock').onclick=tryUnlock;$('pin').onkeydown=function(e){if(e.key==='Enter')tryUnlock()};
