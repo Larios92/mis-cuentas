@@ -194,6 +194,7 @@ li:last-child{border-bottom:0}
     <details class="box"><summary>Deudas y pagos pendientes</summary><div>
       <input id="dname" type="text" placeholder="Qué debes (ej. Tarjeta)" maxlength="40" aria-label="Nombre de la deuda">
       <div class="row2"><input id="damt" type="number" inputmode="decimal" min="0" placeholder="Monto" aria-label="Monto"><input id="ddue" type="date" aria-label="Fecha de vencimiento"></div>
+      <input id="dmin" type="number" inputmode="decimal" min="0" placeholder="Pago mínimo (opcional, para tarjetas)" aria-label="Pago mínimo">
       <select id="dcur" aria-label="Moneda de la deuda"><option value="NIO">Deuda en córdobas (C$)</option><option value="USD">Deuda en dólares (US$)</option></select>
       <button class="sm" data-a="debt">Agregar pago pendiente</button>
       <ul id="dlist"></ul>
@@ -201,6 +202,7 @@ li:last-child{border-bottom:0}
       <select id="dsel" aria-label="Deuda"></select>
       <div class="row2"><input id="dpay" type="number" inputmode="decimal" min="0" placeholder="Monto del abono" aria-label="Monto del abono"><select id="dacc" aria-label="Cuenta de pago"></select></div>
       <button class="sm" data-a="dpay">Registrar abono</button>
+      <button class="sm" data-a="dmin">Pagar el mínimo de la deuda elegida</button>
     </div></details>
 
     <details class="box"><summary>Mis categorías</summary><div>
@@ -314,7 +316,7 @@ li:last-child{border-bottom:0}
     $('alist').innerHTML=fl.length?fl.map(function(x,i){return '<li><label class="d2" style="display:flex;align-items:center;gap:10px"><input class="tg" type="checkbox" data-i="'+i+'"'+(L.off[x.k]?'':' checked')+'><span style="font-size:16px;color:var(--ink)">'+esc(x.k)+'</span></label><span class="amt out">'+money(x.t.amount,x.t.cur||db.cur.base)+'</span></li>'}).join(''):'<li class="empty">Cuando registres gastos fijos aparecerán aquí.</li>';
     var rows=[];
     fl.forEach(function(x){if(L.off[x.k])return;var d=nextDue(x.t,now);if(d)rows.push({name:x.k,amt:cv(x.t),d:d})});
-    db.debts.forEach(function(g){rows.push({name:g.name,amt:cv({amount:g.amount-(g.paid||0),cur:g.cur}),d:new Date(g.due+'T00:00:00')})});
+    db.debts.forEach(function(g){rows.push({name:g.name,amt:cv({amount:dueAmt(g),cur:g.cur}),d:new Date(g.due+'T00:00:00')})});
     rows=rows.map(function(r){r.n=Math.round((r.d-now)/864e5);return r}).filter(function(r){return r.n<=15}).sort(function(a,b){return a.n-b.n});
     $('soon').innerHTML=rows.length?'<h2>Próximos pagos</h2><ul>'+rows.map(function(r){var q=r.d.getDate()<=15?'1ª':'2ª',st=r.n<0?'Vencido hace '+(-r.n)+' d':r.n===0?'Hoy':r.n===1?'Mañana':'En '+r.n+' días',due=r.n<=L.lead;return '<li'+(due?' class="due"':'')+'><div class="d2"><b>'+esc(r.name)+'</b><span'+(due?' style="color:var(--out);font-weight:600"':'')+'>'+st+' · '+q+' quincena</span></div><span class="amt out">'+money(r.amt)+'</span></li>'}).join('')+'</ul>':'';
   }
@@ -346,11 +348,12 @@ li:last-child{border-bottom:0}
   function renderFree(){
     var t0=today(),n=new Date(),ld=new Date(n.getFullYear(),n.getMonth()+1,0).getDate(),first=n.getDate()<=15,end=ym(n)+'-'+(first?'15':String(ld).padStart(2,'0')),have=0,inc=0,out=0;
     db.tx.forEach(function(t){occDates(t,end).forEach(function(d){var v=cv(t),s=t.type==='in'?v:t.type==='tr'?0:-v;if(d<=t0)have+=s;else if(s>0)inc+=s;else out-=s})});
-    db.debts.forEach(function(g){if(g.due<=end)out+=cv({amount:Math.max(0,g.amount-(g.paid||0)),cur:g.cur})});
+    db.debts.forEach(function(g){if(g.due<=end)out+=cv({amount:dueAmt(g),cur:g.cur})});
     var fr=have+inc-out;
     $('free').innerHTML=(db.tx.length||db.debts.length)?'Libre hasta el '+parseInt(end.slice(8),10)+' ('+(first?'1ª':'2ª')+' quincena): <b style="color:var('+(fr>=0?'--in':'--out')+')">'+money(fr)+'</b><br><span style="color:var(--muted);font-size:13px">Tienes '+money(have)+' · te llegará '+money(inc)+' · por pagar '+money(out)+'</span>':'';
   }
   function renderYear(){var y=view.getFullYear(),h='<p class="hint">'+y+' · incluye lo fijo proyectado</p><ul>',ti=0,to=0;for(var m=1;m<=12;m++){var d=monthData(y+'-'+String(m).padStart(2,'0'));ti+=d.in;to+=d.out;if(d.in||d.out)h+='<li><div class="d2"><b style="text-transform:capitalize">'+new Date(y,m-1,1).toLocaleDateString('es',{month:'long'})+'</b><span>+'+money(d.in)+' · −'+money(d.out)+'</span></div><span class="amt '+(d.in-d.out>=0?'in':'out')+'">'+money(d.in-d.out)+'</span></li>'}h+='<li><div class="d2"><b>Total del año</b></div><span class="amt '+(ti-to>=0?'in':'out')+'">'+money(ti-to)+'</span></li></ul>';$('year').innerHTML=h}
+  function dueAmt(g){var r=Math.max(0,g.amount-(g.paid||0));return g.min?Math.min(g.min,r):r}
   function renderDebtUi(){var dv=$('dsel').value;$('dsel').innerHTML=db.debts.map(function(d){return '<option value="'+d.id+'">'+esc(d.name)+' ('+(d.cur==='USD'?'US$':'C$')+')</option>'}).join('');if(dv)$('dsel').value=dv}
   async function forgot(){var e1=$('sem').value.trim();if(!sb||!e1){smsg('Escribe tu correo arriba y toca de nuevo.');return}try{var r=await sb.auth.resetPasswordForEmail(e1,{redirectTo:location.origin+location.pathname});smsg(r.error?errMsg(r.error.message):'Te enviamos un enlace para crear una nueva contraseña. Revisa tu correo.')}catch(x){smsg(errMsg(x&&x.message))}}
   async function newPw(){var p=$('spw2').value;if(p.length<6){smsg('Mínimo 6 caracteres.');return}try{var r=await sb.auth.updateUser({password:p});if(r.error){smsg(errMsg(r.error.message));return}$('spw2').value='';$('srec').hidden=true;smsg('Contraseña actualizada.')}catch(x){smsg(errMsg(x&&x.message))}}
@@ -379,7 +382,7 @@ li:last-child{border-bottom:0}
     $("dlist").innerHTML=db.debts.length?db.debts.slice().sort(function(a,b){return a.due.localeCompare(b.due)}).map(function(d){
       var n=Math.round((new Date(d.due+"T00:00:00")-td)/864e5);
       var st=n<0?"Vencido hace "+(-n)+" d":n===0?"Vence hoy":"Vence en "+n+" d";
-      return '<li><div class="d2"><b>'+esc(d.name)+'</b><span>'+st+' · '+d.due+(d.paid?' · total '+money(d.amount,d.cur):'')+'</span></div><span class="amt out">'+money(d.amount-(d.paid||0),d.cur)+'</span><button class="sm" data-pay="'+d.id+'">Pagar</button><button class="x" data-ddel="'+d.id+'" aria-label="Borrar">×</button></li>';
+      return '<li><div class="d2"><b>'+esc(d.name)+'</b><span>'+st+' · '+d.due+(d.min?' · mínimo '+money(dueAmt(d),d.cur):'')+(d.paid?' · total '+money(d.amount,d.cur):'')+'</span></div><span class="amt out">'+money(d.amount-(d.paid||0),d.cur)+'</span><button class="sm" data-pay="'+d.id+'">Pagar</button><button class="x" data-ddel="'+d.id+'" aria-label="Borrar">×</button></li>';
     }).join(""):'<li class="empty">Sin pagos pendientes.</li>';
     var ch="";
     ["out","in"].forEach(function(k){db.custom[k].forEach(function(c){ch+='<span class="chip">'+esc(c)+' · '+(k==="out"?"gasto":"ingreso")+'<button class="x" data-ccat="'+k+'|'+esc(c)+'" aria-label="Quitar">×</button></span>'})});
@@ -435,12 +438,12 @@ li:last-child{border-bottom:0}
     if(a==="syncnow"){pull();return}
     if(a==="logout"){doOut();return}
     if(a==="budget"){var v=parseFloat($("bamt").value)||0,c=$("bcat").value;if(v>0)db.budgets[c]=v;else delete db.budgets[c];$("bamt").value=""}
-    else if(a==="dpay"){var di=$("dsel").value,dg=db.debts.find(function(x){return String(x.id)===di}),pv=parseFloat($("dpay").value);if(!dg||!(pv>0))return;var rem=dg.amount-(dg.paid||0);if(pv>rem)pv=rem;dg.paid=(dg.paid||0)+pv;db.tx.push({id:Date.now(),type:"out",amount:pv,cur:dg.cur,acc:$("dacc").value,cat:"Deudas",note:"Abono "+dg.name,date:today(),fixed:false});if(dg.amount-dg.paid<=0.005)db.debts=db.debts.filter(function(x){return x!==dg});$("dpay").value=""}
+    else if(a==="dpay"||a==="dmin"){var di=$("dsel").value,dg=db.debts.find(function(x){return String(x.id)===di}),pv=a==="dmin"&&dg?dueAmt(dg):parseFloat($("dpay").value);if(!dg||!(pv>0))return;var rem=dg.amount-(dg.paid||0);if(pv>rem)pv=rem;var dm=dueAmt(dg);dg.paid=(dg.paid||0)+pv;if(dg.min&&pv>=dm-0.005){var q0=new Date(dg.due+"T00:00:00"),n2=new Date(q0.getFullYear(),q0.getMonth()+1,1);n2.setDate(Math.min(q0.getDate(),new Date(n2.getFullYear(),n2.getMonth()+1,0).getDate()));dg.due=ym(n2)+"-"+String(n2.getDate()).padStart(2,"0")}db.tx.push({id:Date.now(),type:"out",amount:pv,cur:dg.cur,acc:$("dacc").value,cat:"Deudas",note:"Abono "+dg.name,date:today(),fixed:false});if(dg.amount-dg.paid<=0.005)db.debts=db.debts.filter(function(x){return x!==dg});$("dpay").value=""}
     else if(a==="acc"){var an=$("anew").value.trim();if(!an||db.accts.indexOf(an)>=0)return;db.accts.push(an);$("anew").value=""}
     else if(b.dataset.acdel){db.accts.splice(parseInt(b.dataset.acdel,10),1)}
     else if(a==="rate"){var rr=parseFloat($("crate").value);if(rr>0)db.cur.rate=rr;db.cur.base=$("cbase").value;$("cur").value=db.cur.base;updConv();updCv()}
     else if(a==="goal"){db.goal={name:$("gname").value.trim(),target:parseFloat($("gtarget").value)||0}}
-    else if(a==="debt"){var n=$("dname").value.trim(),m=parseFloat($("damt").value),d=$("ddue").value;if(!n||!(m>0)||!d)return;db.debts.push({id:Date.now(),name:n,amount:m,cur:$("dcur").value,paid:0,due:d});$("dname").value="";$("damt").value="";$("ddue").value=""}
+    else if(a==="debt"){var n=$("dname").value.trim(),m=parseFloat($("damt").value),d=$("ddue").value;if(!n||!(m>0)||!d)return;db.debts.push({id:Date.now(),name:n,amount:m,cur:$("dcur").value,paid:0,min:parseFloat($("dmin").value)||0,due:d});$("dname").value="";$("damt").value="";$("dmin").value="";$("ddue").value=""}
     else if(a==="cat"){var k=$("ctype").value,nm=$("ccat").value.trim();if(!nm||cl(k).indexOf(nm)>=0)return;db.custom[k].push(nm);$("ccat").value="";fillCats()}
     else if(a==="export"){var js=JSON.stringify(db);$("bk").value=js;$("bk").select();
       try{navigator.clipboard.writeText(js).then(function(){$("bmsg").textContent="Copiado. Pégalo en tus notas."},function(){$("bmsg").textContent="Selecciona el texto y cópialo manualmente."})}catch(x){$("bmsg").textContent="Selecciona el texto y cópialo manualmente."}return}
