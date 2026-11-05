@@ -116,7 +116,9 @@ li:last-child{border-bottom:0}
       <option value="once">Solo una vez</option>
       <option value="month">Fijo: cada mes</option>
       <option value="bi">Fijo: quincenal (días 15 y 30)</option>
+      <option value="cuotas">En cuotas (termina solo)</option>
     </select></div>
+    <input id="ncuo" type="number" inputmode="numeric" min="2" max="120" placeholder="Número de cuotas" aria-label="Número de cuotas" hidden>
     <div class="btns">
       <button class="add" type="submit" id="sub">Guardar movimiento</button>
       <button class="sm" type="button" id="cancel" hidden>Cancelar</button>
@@ -191,7 +193,7 @@ li:last-child{border-bottom:0}
     </div></details>
 
     <details class="box"><summary>Meta de ahorro</summary><div>
-      <p class="hint">Registra tus ahorros como gasto con la categoría “Ahorro” (puede ser fijo) y aquí ves el avance.</p>
+      <p class="hint">Registra tus ahorros como gasto con la categoría “Ahorro” y escribe el nombre de la meta en la nota; así se suma a esa meta. Puedes crear varias.</p>
       <div class="row2"><input id="gname" type="text" placeholder="Para qué ahorras" maxlength="40" aria-label="Nombre de la meta"><input id="gtarget" type="number" inputmode="decimal" min="0" placeholder="Meta" aria-label="Monto de la meta"></div>
       <button class="sm" data-a="goal">Guardar meta</button>
       <div id="gout"></div>
@@ -201,6 +203,7 @@ li:last-child{border-bottom:0}
       <input id="dname" type="text" placeholder="Qué debes (ej. Tarjeta)" maxlength="40" aria-label="Nombre de la deuda">
       <div class="row2"><input id="damt" type="number" inputmode="decimal" min="0" placeholder="Monto" aria-label="Monto"><input id="ddue" type="date" aria-label="Fecha de vencimiento"></div>
       <input id="dmin" type="number" inputmode="decimal" min="0" placeholder="Pago mínimo (opcional, para tarjetas)" aria-label="Pago mínimo">
+      <input id="dapr" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Interés anual % (opcional)" aria-label="Interés anual">
       <select id="dcur" aria-label="Moneda de la deuda"><option value="NIO">Deuda en córdobas (C$)</option><option value="USD">Deuda en dólares (US$)</option></select>
       <button class="sm" data-a="debt">Agregar pago pendiente</button>
       <ul id="dlist"></ul>
@@ -209,6 +212,7 @@ li:last-child{border-bottom:0}
       <div class="row2"><input id="dpay" type="number" inputmode="decimal" min="0" placeholder="Monto del abono" aria-label="Monto del abono"><select id="dacc" aria-label="Cuenta de pago"></select></div>
       <button class="sm" data-a="dpay">Registrar abono</button>
       <button class="sm" data-a="dmin">Pagar el mínimo de la deuda elegida</button>
+      <div class="row2"><input id="dfee" type="number" inputmode="decimal" min="0" placeholder="Cargo o mora a sumar" aria-label="Cargo o mora"><button class="sm" data-a="dfee">Sumar al saldo</button></div>
     </div></details>
 
     <details class="box"><summary>Mis categorías</summary><div>
@@ -220,7 +224,7 @@ li:last-child{border-bottom:0}
     <details class="box"><summary>Respaldo de datos</summary><div>
       <p class="hint">Tus datos viven solo en este navegador. Copia el respaldo y guárdalo en tus notas; para restaurar, pégalo aquí y toca Restaurar.</p>
       <textarea id="bk" aria-label="Respaldo"></textarea>
-      <div class="btns"><button class="sm" data-a="export">Generar y copiar</button><button class="sm" data-a="import">Restaurar</button><button class="sm" data-a="csv">Exportar CSV</button></div>
+      <div class="btns"><button class="sm" data-a="export">Generar y copiar</button><button class="sm" data-a="import">Restaurar</button><button class="sm" data-a="csv">Exportar CSV</button><button class="sm" data-a="csvin">Importar CSV</button></div>
       <p class="hint" id="bmsg"></p>
     </div></details>
   </div>
@@ -283,6 +287,26 @@ li:last-child{border-bottom:0}
       R().updated=new Date().toISOString();save();render();rmsg('Se actualizaron '+n+' tasa(s) desde internet.');
     }catch(e){rmsg('No se pudo actualizar. Se siguen usando las tasas guardadas.')}
   }
+  var editDebt=null;
+  function inN(t,key){if(!t.n)return true;var m=(parseInt(key.slice(0,4),10)-parseInt(t.date.slice(0,4),10))*12+parseInt(key.slice(5,7),10)-parseInt(t.date.slice(5,7),10);return m<t.n}
+  function mTxt(d){var B=d.amount-(d.paid||0),P=d.min,r=(d.apr||0)/1200;if(!d.apr||!d.min||B<=0)return '';if(P<=B*r)return ' · con solo el mínimo nunca se salda';var n=Math.ceil(-Math.log(1-B*r/P)/Math.log(1+r));return ' · solo mínimo: ~'+n+' meses y ~'+money(Math.max(0,n*P-B),d.cur)+' de interés'}
+  function G(){if(!db.goals){db.goals=(db.goal&&db.goal.target>0)?[{id:1,name:db.goal.name||'Mi ahorro',target:db.goal.target}]:[]}return db.goals}
+  function renderGoals(){
+    var gs=G(),sv={},un=0;
+    db.tx.forEach(function(t){if(t.cat!=='Ahorro'||t.type!=='out')return;var v=cv(t)*occ(t),k=(t.note||'').trim().toLowerCase(),hit=gs.find(function(g){return g.name.trim().toLowerCase()===k});if(hit)sv[hit.id]=(sv[hit.id]||0)+v;else un+=v});
+    var h=gs.map(function(g){var s=sv[g.id]||0,p=Math.min(100,Math.round(s/g.target*100));return '<div class="cat"><div class="t"><span>'+esc(g.name)+' <button class="x" data-gdel="'+g.id+'" aria-label="Quitar" style="font-size:16px">×</button></span><span>'+money(s)+' de '+money(g.target)+' · '+p+'%</span></div><div class="bar"><i style="width:'+p+'%;background:var(--in)"></i></div></div>'}).join('');
+    if(un>0)h+='<p class="hint">Ahorro sin meta asignada: '+money(un)+'</p>';
+    $('gout').innerHTML=h;
+  }
+  function csvIn(){
+    var s=$('bk').value,rows=[],row=[],f='',q=false,dq=String.fromCharCode(34),nl=String.fromCharCode(10),cr=String.fromCharCode(13);
+    for(var i=0;i<s.length;i++){var ch=s[i];if(q){if(ch===dq){if(s[i+1]===dq){f+=dq;i++}else q=false}else f+=ch}else if(ch===dq)q=true;else if(ch===','){row.push(f);f=''}else if(ch===nl||ch===cr){if(ch===cr&&s[i+1]===nl)i++;row.push(f);f='';if(row.length>1||row[0])rows.push(row);row=[]}else f+=ch}
+    row.push(f);if(row.length>1||row[0])rows.push(row);
+    if(rows.length&&(rows[0][0]||'').trim().toLowerCase()==='fecha')rows.shift();
+    var n=0,L=R().list;
+    rows.forEach(function(r,i){var d=(r[0]||'').trim(),a=parseFloat(r[4]);if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(d)||!(a>0))return;var ty=(r[1]||'').trim().toLowerCase(),t={id:Date.now()+i,type:ty.indexOf('ing')===0?'in':ty.indexOf('tr')===0?'tr':'out',amount:a,cat:(r[2]||'').trim()||'Otros',note:(r[3]||'').trim(),date:d,fixed:(r[7]||'').trim().toLowerCase().indexOf('s')===0};var cu=(r[5]||'').trim().toUpperCase();if(cu&&L.indexOf(cu)>=0)t.cur=cu;var ac=(r[6]||'').trim();if(ac)t.acc=ac;db.tx.push(t);n++});
+    save();render();$('bmsg').textContent=n?('Se importaron '+n+' movimientos.'):'No se encontró ningún movimiento válido. Usa el formato del CSV exportado.';
+  }
   function fillCur(){
     var L=R().list,b=R().base,o=L.map(function(c){return '<option value="'+c+'">'+cn(c)+' ('+sym(c)+')</option>'}).join('');
     ['cur','dcur','cbase','cvfrom','cvto'].forEach(function(id){var e=$(id),v=e.value;e.innerHTML=o;var ok=v&&L.indexOf(v)>=0;e.value=id==='cbase'?b:ok?v:id==='cvfrom'?(L.indexOf('USD')>=0?'USD':L[0]):b});
@@ -299,15 +323,15 @@ li:last-child{border-bottom:0}
   function cl(t){return t==="tr"?db.accts.slice():CATS[t].concat(db.custom[t]||[])}
   function fillCats(sel){$("cat").innerHTML=cl(type).map(function(c){return '<option value="'+esc(c).split('"').join('&quot;')+'">'+(type==="tr"?"Hacia: ":"")+esc(c)+'</option>'}).join("");if(sel)$("cat").value=sel}
   function setType(t){type=t;document.querySelectorAll("#f .seg button").forEach(function(x){x.classList.toggle("on",x.dataset.t===t)})}
-  function stopEdit(){editId=null;$("sub").textContent="Guardar movimiento";$("cancel").hidden=true;$("amount").value="";$("note").value="";$("freq").value="once";$("cur").value=db.cur.base;$("date").value=today();updConv()}
+  function stopEdit(){editId=null;$("sub").textContent="Guardar movimiento";$("cancel").hidden=true;$("amount").value="";$("note").value="";$("freq").value="once";$("ncuo").value="";$("ncuo").hidden=true;$("cur").value=db.cur.base;$("date").value=today();updConv()}
 
   function render(){
     var key=ym(view);
     $("mname").textContent=view.toLocaleDateString("es",{month:"long",year:"numeric"});
     var last=new Date(view.getFullYear(),view.getMonth()+1,0).getDate();
-    var items=db.tx.filter(function(t){return t.date.slice(0,7)===key||(t.fixed&&t.date.slice(0,7)<key)}).map(function(t){
+    var items=db.tx.filter(function(t){return t.date.slice(0,7)===key||(t.fixed&&t.date.slice(0,7)<key&&inN(t,key))}).map(function(t){
       if(t.date.slice(0,7)===key)return t;
-      var c=Object.assign({},t);c.date=key+"-"+String(Math.min(t.day||parseInt(t.date.slice(8,10),10),last)).padStart(2,"0");return c;
+      var c=Object.assign({},t);c.q=(parseInt(key.slice(0,4),10)-parseInt(t.date.slice(0,4),10))*12+parseInt(key.slice(5,7),10)-parseInt(t.date.slice(5,7),10)+1;c.date=key+"-"+String(Math.min(t.day||parseInt(t.date.slice(8,10),10),last)).padStart(2,"0");return c;
     });
     if(half)items=items.filter(function(t){var d=parseInt(t.date.slice(8,10),10);return half===1?d<=15:d>15});
     items.sort(function(a,b){return b.date.localeCompare(a.date)||b.id-a.id});
@@ -329,13 +353,13 @@ li:last-child{border-bottom:0}
     var qs=$("q").value.trim().toLowerCase(),fa=$("facc").value,li=items.filter(function(t){return (!qs||((t.note||"")+" "+t.cat).toLowerCase().indexOf(qs)>=0)&&(!fa||t.acc===fa||(t.type==="tr"&&t.cat===fa))});
     $("list").innerHTML=li.length?li.map(function(t){
       var d=new Date(t.date+"T00:00:00").toLocaleDateString("es",{day:"numeric",month:"short"});
-      return '<li><button class="d" data-edit="'+t.id+'"><b>'+esc(t.note||t.cat)+'</b><span>'+(t.type==="tr"?esc(t.acc||'?')+' → '+esc(t.cat):esc(t.cat))+' · '+d+(t.fixed?' · Fijo':'')+(t.cur&&t.cur!==db.cur.base?' · ≈ '+money(cv(t)):'')+'</span></button><span class="amt '+t.type+'">'+(t.type==="in"?"+":t.type==="tr"?"⇄ ":"−")+money(t.amount,t.cur||db.cur.base)+'</span><button class="x" data-del="'+t.id+'" aria-label="Borrar">×</button></li>';
+      return '<li><button class="d" data-edit="'+t.id+'"><b>'+esc(t.note||t.cat)+'</b><span>'+(t.type==="tr"?esc(t.acc||'?')+' → '+esc(t.cat):esc(t.cat))+' · '+d+(t.fixed?(t.n?' · Cuota '+(t.q||1)+'/'+t.n:' · Fijo'):'')+(t.cur&&t.cur!==db.cur.base?' · ≈ '+money(cv(t)):'')+'</span></button><span class="amt '+t.type+'">'+(t.type==="in"?"+":t.type==="tr"?"⇄ ":"−")+money(t.amount,t.cur||db.cur.base)+'</span><button class="x" data-del="'+t.id+'" aria-label="Borrar">×</button></li>';
     }).join(""):'<li class="empty">Aún no hay movimientos aquí. Registra el primero arriba.</li>';
     renderMore();
   }
 
   var akeys=[];
-  function nextDue(t,from){var day=t.day||parseInt(t.date.slice(8,10),10),start=new Date(t.date+'T00:00:00');for(var i=0;i<2;i++){var ld=new Date(from.getFullYear(),from.getMonth()+i+1,0).getDate(),d=new Date(from.getFullYear(),from.getMonth()+i,Math.min(day,ld));if(d>=from&&d>=start)return d}return null}
+  function nextDue(t,from){var day=t.day||parseInt(t.date.slice(8,10),10),start=new Date(t.date+'T00:00:00');for(var i=0;i<2;i++){var ld=new Date(from.getFullYear(),from.getMonth()+i+1,0).getDate(),d=new Date(from.getFullYear(),from.getMonth()+i,Math.min(day,ld));if(d>=from&&d>=start&&(!t.n||(d.getFullYear()-start.getFullYear())*12+d.getMonth()-start.getMonth()<t.n))return d}return null}
   function fixedList(){var seen={},o=[];db.tx.forEach(function(t){if(t.type!=='out'||!t.fixed)return;var k=t.note||t.cat;if(seen[k])return;seen[k]=1;o.push({k:k,t:t})});return o}
   function renderAlerts(){
     var L=db.alerts,fl=fixedList(),now=new Date(today()+'T00:00:00');
@@ -349,7 +373,7 @@ li:last-child{border-bottom:0}
     $('soon').innerHTML=rows.length?'<h2>Próximos pagos</h2><ul>'+rows.map(function(r){var q=r.d.getDate()<=15?'1ª':'2ª',st=r.n<0?'Vencido hace '+(-r.n)+' d':r.n===0?'Hoy':r.n===1?'Mañana':'En '+r.n+' días',due=r.n<=L.lead;return '<li'+(due?' class="due"':'')+'><div class="d2"><b>'+esc(r.name)+'</b><span'+(due?' style="color:var(--out);font-weight:600"':'')+'>'+st+' · '+q+' quincena</span></div><span class="amt out">'+money(r.amt)+'</span></li>'}).join('')+'</ul>':'';
   }
 
-  function monthData(key){var r={in:0,out:0,by:{}};db.tx.forEach(function(t){var tk=t.date.slice(0,7);if(t.type!=='tr'&&(tk===key||(t.fixed&&tk<key))){if(t.type==='in')r.in+=cv(t);else{r.out+=cv(t);r.by[t.cat]=(r.by[t.cat]||0)+cv(t)}}});return r}
+  function monthData(key){var r={in:0,out:0,by:{}};db.tx.forEach(function(t){var tk=t.date.slice(0,7);if(t.type!=='tr'&&(tk===key||(t.fixed&&tk<key&&inN(t,key)))){if(t.type==='in')r.in+=cv(t);else{r.out+=cv(t);r.by[t.cat]=(r.by[t.cat]||0)+cv(t)}}});return r}
   function renderTrend(){
     if(!db.tx.length){$('trend').innerHTML='';return}
     var ks=[];
@@ -364,7 +388,7 @@ li:last-child{border-bottom:0}
     if(best&&Math.abs(best.q)>=.05)notes.push(esc(best.c)+' '+(best.q>=0?'+':'')+Math.round(best.q*100)+'% vs mes anterior');
     $('trend').innerHTML='<h2>Últimos 6 meses</h2><div class="box" style="padding:12px">'+svg+'<p class="hint">Verde: ingresos · Rojo: gastos</p>'+(notes.length?'<p style="margin:6px 0 0;font-size:15px">'+notes.join('<br>')+'</p>':'')+'</div>';
   }
-  function occ(t){if(!t.fixed)return t.date>today()?0:1;var n=new Date(),k=(n.getFullYear()-parseInt(t.date.slice(0,4),10))*12+(n.getMonth()+1-parseInt(t.date.slice(5,7),10))+1;return Math.max(k,0)}
+  function occ(t){if(!t.fixed)return t.date>today()?0:1;var n=new Date(),k=(n.getFullYear()-parseInt(t.date.slice(0,4),10))*12+(n.getMonth()+1-parseInt(t.date.slice(5,7),10))+1;return t.n?Math.min(Math.max(k,0),t.n):Math.max(k,0)}
   function renderAccts(){
     var cs=$('acc').value,bal={};
     db.tx.forEach(function(t){var a=t.acc||'';if(t.type==='tr'){var w=cv(t)*occ(t);bal[a]=(bal[a]||0)-w;bal[t.cat]=(bal[t.cat]||0)+w;return}bal[a]=(bal[a]||0)+(t.type==='in'?1:-1)*cv(t)*occ(t)});
@@ -372,7 +396,7 @@ li:last-child{border-bottom:0}
     var names=db.accts.slice();Object.keys(bal).forEach(function(k){if(names.indexOf(k)<0)names.push(k)});
     $('acl').innerHTML=names.map(function(a,i){var v=bal[a]||0;return '<li><div class="d2"><b>'+esc(a||'Sin cuenta')+'</b></div><span class="amt '+(v>=0?'in':'out')+'">'+money(v)+'</span>'+(a&&i<db.accts.length?'<button class="x" data-acdel="'+i+'" aria-label="Quitar">×</button>':'')+'</li>'}).join('');
   }
-  function occDates(t,end){var o=[];if(!t.fixed){if(t.date<=end)o.push(t.date);return o}var y=parseInt(t.date.slice(0,4),10),m=parseInt(t.date.slice(5,7),10)-1,day=t.day||parseInt(t.date.slice(8,10),10),ey=parseInt(end.slice(0,4),10),em=parseInt(end.slice(5,7),10)-1;while(y<ey||(y===ey&&m<=em)){var ld=new Date(y,m+1,0).getDate(),ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(Math.min(day,ld)).padStart(2,'0');if(ds>=t.date&&ds<=end)o.push(ds);m++;if(m>11){m=0;y++}}return o}
+  function occDates(t,end){var o=[];if(!t.fixed){if(t.date<=end)o.push(t.date);return o}var y=parseInt(t.date.slice(0,4),10),m=parseInt(t.date.slice(5,7),10)-1,day=t.day||parseInt(t.date.slice(8,10),10),ey=parseInt(end.slice(0,4),10),em=parseInt(end.slice(5,7),10)-1;var sy=y,sm=m;while(y<ey||(y===ey&&m<=em)){var ld=new Date(y,m+1,0).getDate(),ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(Math.min(day,ld)).padStart(2,'0');if(ds>=t.date&&ds<=end&&(!t.n||(y-sy)*12+m-sm<t.n))o.push(ds);m++;if(m>11){m=0;y++}}return o}
   function renderFree(){
     var t0=today(),n=new Date(),ld=new Date(n.getFullYear(),n.getMonth()+1,0).getDate(),first=n.getDate()<=15,end=ym(n)+'-'+(first?'15':String(ld).padStart(2,'0')),have=0,inc=0,out=0;
     db.tx.forEach(function(t){occDates(t,end).forEach(function(d){var v=cv(t),s=t.type==='in'?v:t.type==='tr'?0:-v;if(d<=t0)have+=s;else if(s>0)inc+=s;else out-=s})});
@@ -402,7 +426,7 @@ li:last-child{border-bottom:0}
     var g=db.goal,saved=0,now=new Date(),ny=now.getFullYear(),nm=now.getMonth()+1;
     db.tx.forEach(function(t){
       if(t.cat!=="Ahorro"||t.type!=="out")return;
-      if(t.fixed){var n=(ny-parseInt(t.date.slice(0,4),10))*12+(nm-parseInt(t.date.slice(5,7),10))+1;if(n>0)saved+=n*cv(t)}else saved+=cv(t);
+      if(t.fixed){var n=(ny-parseInt(t.date.slice(0,4),10))*12+(nm-parseInt(t.date.slice(5,7),10))+1;if(n>0)saved+=Math.min(n,t.n||n)*cv(t)}else saved+=cv(t);
     });
     var gp=g.target>0?Math.min(100,Math.round(saved/g.target*100)):0;
     $("gout").innerHTML=(saved||g.target)?'<div class="cat"><div class="t"><span>'+esc(g.name||"Mi ahorro")+'</span><span>'+money(saved)+(g.target?' de '+money(g.target)+' · '+gp+'%':'')+'</span></div>'+(g.target?'<div class="bar"><i style="width:'+gp+'%;background:var(--in)"></i></div>':'')+'</div>':"";
@@ -410,11 +434,11 @@ li:last-child{border-bottom:0}
     $("dlist").innerHTML=db.debts.length?db.debts.slice().sort(function(a,b){return a.due.localeCompare(b.due)}).map(function(d){
       var n=Math.round((new Date(d.due+"T00:00:00")-td)/864e5);
       var st=n<0?"Vencido hace "+(-n)+" d":n===0?"Vence hoy":"Vence en "+n+" d";
-      return '<li><div class="d2"><b>'+esc(d.name)+'</b><span>'+st+' · '+d.due+(d.min?' · mínimo '+money(dueAmt(d),d.cur):'')+(d.paid?' · total '+money(d.amount,d.cur):'')+'</span></div><span class="amt out">'+money(d.amount-(d.paid||0),d.cur)+'</span><button class="sm" data-pay="'+d.id+'">Pagar</button><button class="x" data-ddel="'+d.id+'" aria-label="Borrar">×</button></li>';
+      return '<li><div class="d2"><b>'+esc(d.name)+'</b><span>'+st+' · '+d.due+(d.min?' · mínimo '+money(dueAmt(d),d.cur):'')+mTxt(d)+(d.paid?' · total '+money(d.amount,d.cur):'')+'</span></div><span class="amt out">'+money(d.amount-(d.paid||0),d.cur)+'</span><button class="sm" data-dedit="'+d.id+'">Editar</button><button class="sm" data-pay="'+d.id+'">Pagar</button><button class="x" data-ddel="'+d.id+'" aria-label="Borrar">×</button></li>';
     }).join(""):'<li class="empty">Sin pagos pendientes.</li>';
     var ch="";
     ["out","in"].forEach(function(k){db.custom[k].forEach(function(c){ch+='<span class="chip">'+esc(c)+' · '+(k==="out"?"gasto":"ingreso")+'<button class="x" data-ccat="'+k+'|'+esc(c)+'" aria-label="Quitar">×</button></span>'})});
-    $("chips").innerHTML=ch;renderAlerts();renderTrend();renderAccts();renderFree();renderYear();renderDebtUi();
+    $("chips").innerHTML=ch;renderAlerts();renderTrend();renderAccts();renderFree();renderYear();renderDebtUi();renderGoals();
   }
 
   $("f").querySelectorAll(".seg button").forEach(function(b){b.onclick=function(){setType(b.dataset.t);fillCats()}});
@@ -432,11 +456,11 @@ li:last-child{border-bottom:0}
     var b={type:type,amount:a,cur:$("cur").value,acc:$("acc").value,cat:$("cat").value,note:$("note").value.trim()};
     if(editId){
       var t=db.tx.find(function(x){return x.id===editId});
-      if(t){Object.assign(t,b,{date:date,fixed:fq!=="once"});delete t.day}
+      if(t){Object.assign(t,b,{date:date,fixed:fq!=="once"});if(fq==="cuotas")t.n=Math.max(2,parseInt($("ncuo").value,10)||2);else delete t.n;delete t.day}
     }else if(fq==="bi"){
       var ld=new Date(parseInt(date.slice(0,4),10),parseInt(date.slice(5,7),10),0).getDate();
       [15,30].forEach(function(dd,i){db.tx.push(Object.assign({id:Date.now()+i,day:dd,fixed:true,date:date.slice(0,7)+"-"+String(Math.min(dd,ld)).padStart(2,"0")},b))});
-    }else db.tx.push(Object.assign({id:Date.now(),date:date,fixed:fq==="month"},b));
+    }else db.tx.push(Object.assign({id:Date.now(),date:date,fixed:fq==="month"||fq==="cuotas",n:fq==="cuotas"?Math.max(2,parseInt($("ncuo").value,10)||2):undefined},b));
     save();stopEdit();
     view=new Date(date+"T00:00:00");view.setDate(1);render();
   };
@@ -447,7 +471,7 @@ li:last-child{border-bottom:0}
     else if(b.dataset.edit){
       var t=db.tx.find(function(x){return String(x.id)===b.dataset.edit});if(!t)return;
       editId=t.id;setType(t.type);fillCats(t.cat);
-      $("amount").value=t.amount;$("cur").value=t.cur||db.cur.base;updConv();$("acc").value=t.acc||db.accts[0];$("note").value=t.note||"";$("date").value=t.date;$("freq").value=t.fixed?"month":"once";
+      $("amount").value=t.amount;$("cur").value=t.cur||db.cur.base;updConv();$("acc").value=t.acc||db.accts[0];$("note").value=t.note||"";$("date").value=t.date;$("freq").value=t.fixed?(t.n?"cuotas":"month"):"once";$("ncuo").value=t.n||"";$("ncuo").hidden=!t.n;
       $("sub").textContent="Guardar cambios";$("cancel").hidden=false;
       $("f").scrollIntoView({behavior:"smooth",block:"center"});
     }
@@ -456,6 +480,7 @@ li:last-child{border-bottom:0}
   $("more").onclick=function(e){
     var b=e.target.closest("button");if(!b)return;
     var a=b.dataset.a;
+    if(a==="csvin"){csvIn();return}
     if(a==="rates"){updateRates(true);return}
     if(a==="forgot"){forgot();return}
     if(a==="newpw"){newPw();return}
@@ -467,13 +492,16 @@ li:last-child{border-bottom:0}
     if(a==="syncnow"){pull();return}
     if(a==="logout"){doOut();return}
     if(a==="budget"){var v=parseFloat($("bamt").value)||0,c=$("bcat").value;if(v>0)db.budgets[c]=v;else delete db.budgets[c];$("bamt").value=""}
+    else if(b.dataset.dedit){var g2=db.debts.find(function(x){return String(x.id)===b.dataset.dedit});if(!g2)return;editDebt=g2.id;$("dname").value=g2.name;$("damt").value=g2.amount;$("dmin").value=g2.min||"";$("dapr").value=g2.apr||"";$("dcur").value=g2.cur||db.cur.base;$("ddue").value=g2.due;document.querySelector('[data-a="debt"]').textContent="Guardar cambios";return}
+    else if(a==="dfee"){var gd=db.debts.find(function(x){return String(x.id)===$("dsel").value}),fv=parseFloat($("dfee").value);if(!gd||!(fv>0))return;gd.amount+=fv;$("dfee").value=""}
+    else if(b.dataset.gdel){db.goals=G().filter(function(x){return String(x.id)!==b.dataset.gdel})}
     else if(a==="dpay"||a==="dmin"){var di=$("dsel").value,dg=db.debts.find(function(x){return String(x.id)===di}),pv=a==="dmin"&&dg?dueAmt(dg):parseFloat($("dpay").value);if(!dg||!(pv>0))return;var rem=dg.amount-(dg.paid||0);if(pv>rem)pv=rem;var dm=dueAmt(dg);dg.paid=(dg.paid||0)+pv;if(dg.min&&pv>=dm-0.005){var q0=new Date(dg.due+"T00:00:00"),n2=new Date(q0.getFullYear(),q0.getMonth()+1,1);n2.setDate(Math.min(q0.getDate(),new Date(n2.getFullYear(),n2.getMonth()+1,0).getDate()));dg.due=ym(n2)+"-"+String(n2.getDate()).padStart(2,"0")}db.tx.push({id:Date.now(),type:"out",amount:pv,cur:dg.cur,acc:$("dacc").value,cat:"Deudas",note:"Abono "+dg.name,date:today(),fixed:false});if(dg.amount-dg.paid<=0.005)db.debts=db.debts.filter(function(x){return x!==dg});$("dpay").value=""}
     else if(a==="acc"){var an=$("anew").value.trim();if(!an||db.accts.indexOf(an)>=0)return;db.accts.push(an);$("anew").value=""}
     else if(b.dataset.acdel){db.accts.splice(parseInt(b.dataset.acdel,10),1)}
     else if(a==="cadd"){var cc=$("cadd").value,rv=parseFloat($("crate2").value),au=$("cauto").checked;if(!cc||(!(rv>0)&&!au))return;R().list.push(cc);R().rates[cc]=rv>0?rv:0;if(au){R().auto=R().auto||{};R().auto[cc]=true}$("crate2").value="";$("cauto").checked=false;if(au)setTimeout(function(){updateRates(true)},0)}
     else if(b.dataset.cdel){var cd=b.dataset.cdel;R().list=R().list.filter(function(x){return x!==cd})}
-    else if(a==="goal"){db.goal={name:$("gname").value.trim(),target:parseFloat($("gtarget").value)||0}}
-    else if(a==="debt"){var n=$("dname").value.trim(),m=parseFloat($("damt").value),d=$("ddue").value;if(!n||!(m>0)||!d)return;db.debts.push({id:Date.now(),name:n,amount:m,cur:$("dcur").value,paid:0,min:parseFloat($("dmin").value)||0,due:d});$("dname").value="";$("damt").value="";$("dmin").value="";$("ddue").value=""}
+    else if(a==="goal"){var gn=$("gname").value.trim(),gt=parseFloat($("gtarget").value)||0;if(!gn||!(gt>0))return;G().push({id:Date.now(),name:gn,target:gt});$("gname").value="";$("gtarget").value=""}
+    else if(a==="debt"){var n=$("dname").value.trim(),m=parseFloat($("damt").value),d=$("ddue").value;if(!n||!(m>0)||!d)return;if(editDebt){var ge=db.debts.find(function(x){return x.id===editDebt});if(ge){ge.name=n;ge.amount=m;ge.cur=$("dcur").value;ge.min=parseFloat($("dmin").value)||0;ge.apr=parseFloat($("dapr").value)||0;ge.due=d}editDebt=null;b.textContent="Agregar pago pendiente"}else db.debts.push({id:Date.now(),name:n,amount:m,cur:$("dcur").value,paid:0,min:parseFloat($("dmin").value)||0,apr:parseFloat($("dapr").value)||0,due:d});$("dname").value="";$("damt").value="";$("dmin").value="";$("dapr").value="";$("ddue").value=""}
     else if(a==="cat"){var k=$("ctype").value,nm=$("ccat").value.trim();if(!nm||cl(k).indexOf(nm)>=0)return;db.custom[k].push(nm);$("ccat").value="";fillCats()}
     else if(a==="export"){var js=JSON.stringify(db);$("bk").value=js;$("bk").select();
       try{navigator.clipboard.writeText(js).then(function(){$("bmsg").textContent="Copiado. Pégalo en tus notas."},function(){$("bmsg").textContent="Selecciona el texto y cópialo manualmente."})}catch(x){$("bmsg").textContent="Selecciona el texto y cópialo manualmente."}return}
@@ -494,12 +522,13 @@ li:last-child{border-bottom:0}
 
   if(sb){sb.auth.getSession().then(function(r){var s=r.data&&r.data.session;if(s){uid=s.user.id;uemail=s.user.email;sui();pull()}});sb.auth.onAuthStateChange(function(ev){if(ev==='SIGNED_OUT'){uid=null;sui()}if(ev==='PASSWORD_RECOVERY'){$('srec').hidden=false;$('srec').closest('details').open=true;smsg('Escribe tu nueva contraseña.')}})}else{smsg('La sincronización funciona desde tu enlace publicado en GitHub.')}
   fillCur();if(R().list.some(function(c){return R().auto&&R().auto[c]})&&(!R().updated||Date.now()-new Date(R().updated).getTime()>864e5))updateRates(false);$('cur').value=db.cur.base;$('rates').onchange=function(e){var ca=e.target.dataset.auto;if(ca){R().auto=R().auto||{};if(e.target.checked)R().auto[ca]=true;else delete R().auto[ca];save();fillCur();if(e.target.checked)updateRates(true);return}var c=e.target.dataset.rate;if(!c)return;var v=parseFloat(e.target.value);if(v>0){R().rates[c]=v;save();render();updConv()}};$('cbase').onchange=function(){R().base=$('cbase').value;save();$('cur').value=R().base;render();updConv()};$('cvto').onchange=updCv;$('amount').oninput=updConv;$('cur').onchange=updConv;$('cvamt').oninput=updCv;$('cvfrom').onchange=updCv;
+  $('freq').onchange=function(){$('ncuo').hidden=this.value!=='cuotas'};
   $('q').oninput=render;$('facc').onchange=render;
   try{if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js')}catch(e){}
   lockNow();$('unlock').onclick=tryUnlock;$('pin').onkeydown=function(e){if(e.key==='Enter')tryUnlock()};
   var hAt=0;document.addEventListener('visibilitychange',function(){if(document.hidden)hAt=Date.now();else if(hAt&&Date.now()-hAt>60000)lockNow()});
   sui();document.addEventListener('visibilitychange',function(){if(!document.hidden)pull()});
-  $("gname").value=db.goal.name||"";if(db.goal.target)$("gtarget").value=db.goal.target;
+  
   $("date").value=today();fillCats();render();
 })();
 </script>
