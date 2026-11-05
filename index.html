@@ -76,6 +76,7 @@ li:last-child{border-bottom:0}
 <body>
 <div id="lock" hidden style="position:fixed;inset:0;z-index:50;background:var(--bg);display:grid;place-content:center;gap:12px;padding:24px;text-align:center"><h1 style="margin:0">Mis cuentas</h1><input id="pin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN" aria-label="PIN" style="text-align:center;font-size:22px"><button class="add" id="unlock" style="flex:none">Desbloquear</button><p class="hint" id="lmsg"></p></div>
 <main>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:6px"><button class="sm" id="opencfg">⚙ Configuración</button></div>
   <div class="month">
     <button id="prev" aria-label="Mes anterior">‹</button>
     <h1 id="mname"></h1>
@@ -131,7 +132,9 @@ li:last-child{border-bottom:0}
   <div class="row2" style="margin-bottom:8px"><input id="q" type="search" placeholder="Buscar movimiento" aria-label="Buscar"><select id="facc" aria-label="Filtrar por cuenta"></select></div>
   <ul id="list"></ul>
 
-  <h2>Más herramientas</h2>
+  <div id="cfg" hidden style="position:fixed;inset:0;z-index:40;background:var(--bg);overflow:auto">
+  <div style="max-width:520px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(40px + env(safe-area-inset-bottom,0px))">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h1 style="margin:0;font-size:22px">Configuración</h1><button class="sm" id="closecfg">Cerrar</button></div>
   <div id="more">
     <details class="box" open><summary>Sincronizar mis dispositivos</summary><div>
       <p class="hint">Entra con tu correo en cada dispositivo. Inicia sesión primero en el que tiene tus datos; en los demás, hazlo con la app vacía.</p>
@@ -228,6 +231,7 @@ li:last-child{border-bottom:0}
       <p class="hint" id="bmsg"></p>
     </div></details>
   </div>
+  </div></div>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" crossorigin="anonymous"></script>
@@ -523,6 +527,7 @@ li:last-child{border-bottom:0}
   if(sb){sb.auth.getSession().then(function(r){var s=r.data&&r.data.session;if(s){uid=s.user.id;uemail=s.user.email;sui();pull()}});sb.auth.onAuthStateChange(function(ev){if(ev==='SIGNED_OUT'){uid=null;sui()}if(ev==='PASSWORD_RECOVERY'){$('srec').hidden=false;$('srec').closest('details').open=true;smsg('Escribe tu nueva contraseña.')}})}else{smsg('La sincronización funciona desde tu enlace publicado en GitHub.')}
   fillCur();if(R().list.some(function(c){return R().auto&&R().auto[c]})&&(!R().updated||Date.now()-new Date(R().updated).getTime()>864e5))updateRates(false);$('cur').value=db.cur.base;$('rates').onchange=function(e){var ca=e.target.dataset.auto;if(ca){R().auto=R().auto||{};if(e.target.checked)R().auto[ca]=true;else delete R().auto[ca];save();fillCur();if(e.target.checked)updateRates(true);return}var c=e.target.dataset.rate;if(!c)return;var v=parseFloat(e.target.value);if(v>0){R().rates[c]=v;save();render();updConv()}};$('cbase').onchange=function(){R().base=$('cbase').value;save();$('cur').value=R().base;render();updConv()};$('cvto').onchange=updCv;$('amount').oninput=updConv;$('cur').onchange=updConv;$('cvamt').oninput=updCv;$('cvfrom').onchange=updCv;
   $('freq').onchange=function(){$('ncuo').hidden=this.value!=='cuotas'};
+  $('opencfg').onclick=function(){$('cfg').hidden=false;$('cfg').scrollTop=0};$('closecfg').onclick=function(){$('cfg').hidden=true};
   $('q').oninput=render;$('facc').onchange=render;
   try{if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js')}catch(e){}
   lockNow();$('unlock').onclick=tryUnlock;$('pin').onkeydown=function(e){if(e.key==='Enter')tryUnlock()};
