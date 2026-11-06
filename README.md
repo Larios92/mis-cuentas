@@ -1,4 +1,4 @@
-# Mis cuentas
+# Mi Bolsillo Alcanza
 
 App web personal para llevar ingresos y gastos: quincenas, córdobas y
 dólares (y otras monedas), tarjetas, deudas, cuentas y sincronización
