@@ -477,7 +477,7 @@ li:last-child{border-bottom:0}
 
   $("list").onclick=function(e){
     var b=e.target.closest("button");if(!b)return;
-    if(b.dataset.del){db.tx=db.tx.filter(function(t){return String(t.id)!==b.dataset.del});if(editId&&String(editId)===b.dataset.del)stopEdit();save();render()}
+    if(b.dataset.del){var dt=db.tx.find(function(t){return String(t.id)===b.dataset.del});if(dt&&dt.dbt){var dgx=db.debts.find(function(x){return x.id===dt.dbt});if(dgx)dgx.paid=Math.max(0,(dgx.paid||0)-dt.amount);else if(dt.snap){dt.snap.paid=Math.max(0,(dt.snap.paid||0)-dt.amount);db.debts.push(dt.snap)}}db.tx=db.tx.filter(function(t){return String(t.id)!==b.dataset.del});if(editId&&String(editId)===b.dataset.del)stopEdit();save();render()}
     else if(b.dataset.edit){
       var t=db.tx.find(function(x){return String(x.id)===b.dataset.edit});if(!t)return;
       editId=t.id;setType(t.type);fillCats(t.cat);
@@ -505,7 +505,7 @@ li:last-child{border-bottom:0}
     else if(b.dataset.dedit){var g2=db.debts.find(function(x){return String(x.id)===b.dataset.dedit});if(!g2)return;editDebt=g2.id;$("dname").value=g2.name;$("damt").value=g2.amount;$("dmin").value=g2.min||"";$("dapr").value=g2.apr||"";$("dcur").value=g2.cur||db.cur.base;$("ddue").value=g2.due;document.querySelector('[data-a="debt"]').textContent="Guardar cambios";return}
     else if(a==="dfee"){var gd=db.debts.find(function(x){return String(x.id)===$("dsel").value}),fv=parseFloat($("dfee").value);if(!gd||!(fv>0))return;gd.amount+=fv;$("dfee").value=""}
     else if(b.dataset.gdel){db.goals=G().filter(function(x){return String(x.id)!==b.dataset.gdel})}
-    else if(a==="dpay"||a==="dmin"){var di=$("dsel").value,dg=db.debts.find(function(x){return String(x.id)===di}),pv=a==="dmin"&&dg?dueAmt(dg):parseFloat($("dpay").value);if(!dg||!(pv>0))return;var rem=dg.amount-(dg.paid||0);if(pv>rem)pv=rem;var dm=dueAmt(dg);dg.paid=(dg.paid||0)+pv;if(dg.min&&pv>=dm-0.005){var q0=new Date(dg.due+"T00:00:00"),n2=new Date(q0.getFullYear(),q0.getMonth()+1,1);n2.setDate(Math.min(q0.getDate(),new Date(n2.getFullYear(),n2.getMonth()+1,0).getDate()));dg.due=ym(n2)+"-"+String(n2.getDate()).padStart(2,"0")}db.tx.push({id:Date.now(),type:"out",amount:pv,cur:dg.cur,acc:$("dacc").value,cat:"Deudas",note:"Abono "+dg.name,date:today(),fixed:false});if(dg.amount-dg.paid<=0.005)db.debts=db.debts.filter(function(x){return x!==dg});$("dpay").value=""}
+    else if(a==="dpay"||a==="dmin"){var di=$("dsel").value,dg=db.debts.find(function(x){return String(x.id)===di}),pv=a==="dmin"&&dg?dueAmt(dg):parseFloat($("dpay").value);if(!dg||!(pv>0))return;var rem=dg.amount-(dg.paid||0);if(pv>rem)pv=rem;var dm=dueAmt(dg);dg.paid=(dg.paid||0)+pv;if(dg.min&&pv>=dm-0.005){var q0=new Date(dg.due+"T00:00:00"),n2=new Date(q0.getFullYear(),q0.getMonth()+1,1);n2.setDate(Math.min(q0.getDate(),new Date(n2.getFullYear(),n2.getMonth()+1,0).getDate()));dg.due=ym(n2)+"-"+String(n2.getDate()).padStart(2,"0")}var tx0={id:Date.now(),type:"out",amount:pv,cur:dg.cur,acc:$("dacc").value,cat:"Deudas",note:"Abono "+dg.name,date:today(),fixed:false,dbt:dg.id};db.tx.push(tx0);if(dg.amount-dg.paid<=0.005){tx0.snap=Object.assign({},dg);db.debts=db.debts.filter(function(x){return x!==dg})}$("dpay").value=""}
     else if(a==="acc"){var an=$("anew").value.trim();if(!an||db.accts.indexOf(an)>=0)return;db.accts.push(an);$("anew").value=""}
     else if(b.dataset.acdel){db.accts.splice(parseInt(b.dataset.acdel,10),1)}
     else if(a==="cadd"){var cc=$("cadd").value,rv=parseFloat($("crate2").value),au=$("cauto").checked;if(!cc||(!(rv>0)&&!au))return;R().list.push(cc);R().rates[cc]=rv>0?rv:0;if(au){R().auto=R().auto||{};R().auto[cc]=true}$("crate2").value="";$("cauto").checked=false;if(au)setTimeout(function(){updateRates(true)},0)}
@@ -521,7 +521,7 @@ li:last-child{border-bottom:0}
     }
     else if(b.dataset.pay){
       var dd=db.debts.find(function(x){return String(x.id)===b.dataset.pay});if(!dd)return;
-      db.tx.push({id:Date.now(),type:"out",amount:Math.max(0,dd.amount-(dd.paid||0)),cur:dd.cur,acc:$("dacc").value,cat:"Deudas",note:dd.name,date:today(),fixed:false});
+      db.tx.push({id:Date.now(),type:"out",amount:Math.max(0,dd.amount-(dd.paid||0)),cur:dd.cur,acc:$("dacc").value,cat:"Deudas",note:dd.name,date:today(),fixed:false,dbt:dd.id,snap:Object.assign({},dd,{paid:dd.amount})});
       db.debts=db.debts.filter(function(x){return x!==dd});
     }
     else if(b.dataset.ddel){db.debts=db.debts.filter(function(x){return String(x.id)!==b.dataset.ddel})}
